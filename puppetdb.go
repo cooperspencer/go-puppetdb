@@ -9,6 +9,8 @@ import (
 	"net/url"
 	"strings"
 	"time"
+	"io/ioutil"
+	"crypto/x509"
 )
 
 type Client struct {
@@ -54,7 +56,7 @@ type FactJson struct {
 }
 
 type NodeJson struct {
-	Name             string `json:"name"`
+	Name             string `json:"certname"`
 	Deactivated      string `json:"deactivated"`
 	CatalogTimestamp string `json:"catalog_timestamp"`
 	FactsTimestamp   string `json:"facts_timestamp"`
@@ -96,6 +98,33 @@ type ValueMetricJson struct {
 
 func NewClient(baseUrl string, verbose bool) *Client {
 	tr := &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}}
+	client := &http.Client{Transport: tr}
+	return &Client{baseUrl, "", "", client, verbose}
+}
+
+func NewClientSSL(baseUrl, cacert, hostcert, key string, verbose bool) *Client {
+	// Load client cert
+	cert, err := tls.LoadX509KeyPair(hostcert, key)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	// Load CA cert
+	caCert, err := ioutil.ReadFile(cacert)
+	if err != nil {
+		log.Fatal(err)
+	}
+	caCertPool := x509.NewCertPool()
+	caCertPool.AppendCertsFromPEM(caCert)
+
+	// Setup HTTPS client
+	tlsConfig := &tls.Config{
+		Certificates:  []tls.Certificate{cert},
+		RootCAs:		caCertPool,
+	}
+	tlsConfig.BuildNameToCertificate()
+	tr := &http.Transport{TLSClientConfig:tlsConfig}
+
 	client := &http.Client{Transport: tr}
 	return &Client{baseUrl, "", "", client, verbose}
 }
